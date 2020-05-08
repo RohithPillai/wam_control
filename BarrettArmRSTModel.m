@@ -156,12 +156,19 @@ clear m0 m I0 I Qs Q0 Q1 Q2 Q3 Q4 Q5 Q6 Q7 r r0 li tool tform gravityVec
 showdetails(wam_sim);
 
 %% Run the IK through
+
+baseTrans = [0.75,0.5,1];
 intrvl = 80;
-traj = dlmread('tooltip_xyz.txt');
+traj = dlmread('tooltip_xyz.txt')-baseTrans;
+traj(:,1:2) = -traj(:,1:2);
+traj = (rotz(45)*traj')';
+traj(:,2) = traj(:,2) + 0.275;
 waypts = traj(1:intrvl:end,:);
 
-% plot3(waypts(:,1), waypts(:,2), waypts(:,3), '*k');
-
+plot3(waypts(:,1), waypts(:,2), waypts(:,3), '*k');
+hold on;
+show(wam_model);
+axis square;
 %%
 t = (0:0.2:10)'; % Time
 count = length(t);
@@ -171,7 +178,7 @@ ndof = length(q0);
 qs = zeros(count, ndof);
 
 ik = robotics.InverseKinematics('RigidBodyTree', wam_model);
-weights = [0, 0, 0, 1, 1, 1];
+weights = [1, 1, 1, 1, 1, 1];
 endEffector = 'tool';
 eePose = zeros(count, 3);
 
@@ -180,7 +187,6 @@ qInitial = q0;
 for i = 1:count
     % Solve for the configuration satisfying the desired end effector
     % position 
-    i
     point = waypts(i,:);    
     qSol = ik(endEffector,trvec2tform(point),weights,qInitial);
     % Store the configuration    
@@ -191,9 +197,18 @@ for i = 1:count
     qInitial = qSol;
     
 end
+fprintf("IK done!");
+
 %%
 ttraj = cscvn(waypts');
 %plot ttraj splines
 
-fnplt(ttraj, 'r',2);
+plot3(eePose(:,1), eePose(:,2), eePose(:,3), '^r');
+hold on;
+plot3(waypts(1:51,1), waypts(1:51,2), waypts(1:51,3), '*k');
+hold on;
+fnplt(ttraj, 'g',2);
 
+hold on;
+show(wam_model);
+axis square;
