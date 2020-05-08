@@ -1,5 +1,4 @@
-% Om namo narayanaya
-% Om gum ganapathaye namo namaha
+
 clear all;
 clc;
 
@@ -163,52 +162,62 @@ traj = dlmread('tooltip_xyz.txt')-baseTrans;
 traj(:,1:2) = -traj(:,1:2);
 traj = (rotz(45)*traj')';
 traj(:,2) = traj(:,2) + 0.275;
-waypts = traj(1:intrvl:end,:);
+% waypts = traj(1:intrvl:end,:);
 
-plot3(waypts(:,1), waypts(:,2), waypts(:,3), '*k');
+plot3(traj(:,1), traj(:,2), traj(:,3), '*k');
 hold on;
 show(wam_model);
 axis square;
 %%
-t = (0:0.2:10)'; % Time
-count = length(t);
+t = size(traj,1); % Time
 
 q0 = homeConfiguration(wam_model);
 ndof = length(q0);
-qs = zeros(count, ndof);
+qs = zeros(t, ndof);
 
 ik = robotics.InverseKinematics('RigidBodyTree', wam_model);
 weights = [1, 1, 1, 1, 1, 1];
 endEffector = 'tool';
-eePose = zeros(count, 3);
+eePose = zeros(t, 3);
 
 qInitial = q0;
 % Use home configuration as the initial guess
-for i = 1:count
+for i = 1:t
     % Solve for the configuration satisfying the desired end effector
     % position 
-    point = waypts(i,:);    
+    point = traj(i,:);    
     qSol = ik(endEffector,trvec2tform(point),weights,qInitial);
     % Store the configuration    
     qs(i,:) = qSol;
-    
-    eePose(i,:) = tform2trvec(getTransform(wam_model,qSol,endEffector));
+%     eePose(i,:) = tform2trvec(getTransform(wam_model,qSol,endEffector));
     % Start from prior solution    
     qInitial = qSol;
     
 end
-fprintf("IK done!");
+fprintf("IK done!\n");
+dlmwrite('wamIKThetas.txt',qs);
+%% Visualize robot configurations
+dur = 10;
+trajTimes = linspace(0,dur,t);
+shwEvry = 70;
 
-%%
-ttraj = cscvn(waypts');
-%plot ttraj splines
+figure;
+set(gcf,'Visible','on');
+axis equal;
+plot3(traj(:,1), traj(:,2), traj(:,3), 'k-');
+hold on;
+title('Robot waypoint tracking visualization')
+st_t = cputime;
+for idx = 1:shwEvry:t % show only 100 points for efficiency
+    
+    show(wam_model, qs(idx,:)', 'PreservePlot',false);
+    hold on;
 
-plot3(eePose(:,1), eePose(:,2), eePose(:,3), '^r');
-hold on;
-plot3(waypts(1:51,1), waypts(1:51,2), waypts(1:51,3), '*k');
-hold on;
-fnplt(ttraj, 'g',2);
+    plot3(eePose(idx,1), eePose(idx,2), eePose(idx,3), 'r-','LineWidth',2);
+    hold on;
+    pause(trajTimes(1,2)*shwEvry);    
+end
+fprintf("Time s:%.2f\n",cputime -st_t);
+hold off
 
-hold on;
-show(wam_model);
-axis square;
+
