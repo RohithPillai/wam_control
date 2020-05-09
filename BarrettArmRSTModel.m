@@ -296,6 +296,7 @@ for t=1:T
 end
 
 %% Decentralized control strategy
+% decentralized feedforward compensation
 
 % set up sim vars.
 q_sim = zeros(size(q_mod));
@@ -318,8 +319,8 @@ err_prev = 0;
 % each time step
 for t=1:T
     
-    % get the tau from the inv dyn.
-    tau_mod = inverseDynamics(wam_model,q_mod(t,:)',qd_mod(t,:)',qd_mod(t,:)');
+    % get the tau_ffc from the inv dyn. 
+    tau_ffc = inverseDynamics(wam_model,q_mod(t,:)',qd_mod(t,:)',qd_mod(t,:)');
     
     % get the actual motion from the sim using it's for dyn.
     qdd_sim(t,:) = forwardDynamics(wam_sim,q_sim(t,:)',qd_sim(t,:)',tau_mod);
