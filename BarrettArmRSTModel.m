@@ -211,7 +211,7 @@ dur = 10;
 trajTimes = linspace(0,dur,T);
 ts = trajTimes(1,2); % indv. timestep
 shwEvry = 70;
-viz = 0;
+viz = 1;
 
 if viz 
     figure;
@@ -238,8 +238,8 @@ end
 clc;
 % get the joint vel. and acc. for the inv. dynamics
 q_mod = [qs; qs(end,:); qs(end,:)];
-qd_mod = diff(qs,1)/ts;
-qdd_mod = diff(qs,2)/ts;
+qd_mod = diff(q_mod,1)/ts;
+qdd_mod = diff(q_mod,2)/ts;
 
 % set up sim vars.
 q_sim = zeros(size(q_mod));
@@ -257,7 +257,8 @@ figure;
 set(gcf,'Visible','on');
 plot3(traj(:,1), traj(:,2), traj(:,3), 'k*');
 hold on;
-    
+
+err_prev = 0;
 % each time step
 for t=1:T
     
@@ -278,6 +279,14 @@ for t=1:T
     plot3(eePose_sim(t,1), eePose_sim(t,2), eePose_sim(t,3), 'b*');
     hold on;
     
+    err_curr = q_mod(t,:)- q_sim(t,:); 
+    errd = err_curr - err_prev;
+   
+    % PID controller
+    
+    kp*err + kd*errd + 
+    
+    err_prev = err_curr;
 end
 
 
