@@ -233,13 +233,69 @@ if viz
     fprintf("Time s:%.2f\n",cputime -st_t);
     hold off
 end
-%% Dynamics for simulation
+%% Centralized Control strategy
 
+% Dynamics for simulation
 clc;
+
 % get the joint vel. and acc. for the inv. dynamics
 q_mod = [qs; qs(end,:); qs(end,:)];
 qd_mod = diff(q_mod,1)/ts;
 qdd_mod = diff(q_mod,2)/ts;
+
+% set up sim vars.
+q_sim = zeros(size(q_mod));
+qd_sim = zeros(size(qd_mod));
+qdd_sim = zeros(size(qdd_mod));
+eePose_sim = zeros(size(eePose_mod));
+
+% sim and model begin at same config. and vel.
+q_sim(1,:) = q_mod(1,:);
+qd_sim(1,:) = qd_mod(1,:);
+
+endEffector = 'tool';
+
+figure;
+set(gcf,'Visible','on');
+plot3(traj(:,1), traj(:,2), traj(:,3), 'k*');
+hold on;
+
+kp = 0.01;
+kd = 0.01;
+
+err_prev = 0;
+% each time step
+for t=1:T
+    
+    % get the tau from the inv dyn.
+    tau_mod = inverseDynamics(wam_model,q_mod(t,:)',qd_mod(t,:)',qd_mod(t,:)');
+    tau_g = inverseDynamics(wam_model,q_sim(t,:)');
+    
+    % get the actual motion from the sim using it's for dyn.
+    qdd_sim(t,:) = forwardDynamics(wam_sim,q_sim(t,:)',qd_sim(t,:)',tau_mod);
+    
+    % update our actual sim joint config. and vel. values using Euler method
+    qd_sim(t+1,:) =  qd_sim(t,:) + (ts*qdd_sim(t,:));
+    q_sim(t+1,:) =  q_sim(t,:) + (ts*qd_sim(t,:));
+    
+    % find the actual eePose from the sim
+    eePose_sim(t,:) = tform2trvec(getTransform(wam_sim,q_sim(t,:)',endEffector));
+    
+    %plot it 
+    plot3(eePose_sim(t,1), eePose_sim(t,2), eePose_sim(t,3), 'b*');
+    hold on;
+    
+    err_curr = q_mod(t,:)- q_sim(t,:); 
+    errd = err_curr - err_prev;
+   
+    % PID controller
+    
+    kp*err + kd*errd + tau_g;
+    
+    err_prev = err_curr;
+end
+
+%% Decentralized control strategy
 
 % set up sim vars.
 q_sim = zeros(size(q_mod));
@@ -284,10 +340,8 @@ for t=1:T
    
     % PID controller
     
-    kp*err + kd*errd + 
+    kp*err + kd*errd + tau_g;
     
     err_prev = err_curr;
 end
-
-
 
