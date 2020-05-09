@@ -50,7 +50,8 @@ Q7 = [0.913 0.408 0;
       0 0 0.999];
 Qs = [Q1,Q2,Q3,Q4,Q5,Q6,Q7];
 
-gravityVec = [0 0 -9.80665];
+gravityVec = [0 0 -9.81];
+ndof = 7;
 
 % import and add the given params
 wam_model = importrobot('wam_model.urdf');
@@ -150,39 +151,43 @@ tform = trvec2tform([0, 0, 0.12]); % User defined
 setFixedTransform(tool.Joint,tform);
 wam_sim.addBody(tool, wam_sim.BodyNames{1,7});
 
-clear m0 m I0 I Qs Q0 Q1 Q2 Q3 Q4 Q5 Q6 Q7 r r0 li tool tform gravityVec
+clear m0 m I0 I Qs Q0 Q1 Q2 Q3 Q4 Q5 Q6 Q7 r r0 li tool tform 
 
 showdetails(wam_sim);
 
-%% Run the IK through
+%% Set up the trajectory 
 
+%
 baseTrans = [0.75,0.5,1];
-intrvl = 80;
+% intrvl = 80;
 traj = dlmread('tooltip_xyz.txt')-baseTrans;
 traj(:,1:2) = -traj(:,1:2);
 traj = (rotz(45)*traj')';
 traj(:,2) = traj(:,2) + 0.275;
 % waypts = traj(1:intrvl:end,:);
 
+T = size(traj,1); % Time
+
 plot3(traj(:,1), traj(:,2), traj(:,3), '*k');
 hold on;
 show(wam_model);
 axis square;
-%%
-t = size(traj,1); % Time
+
+
+%% Run the IK through
 
 q0 = homeConfiguration(wam_model);
 ndof = length(q0);
-qs = zeros(t, ndof);
+qs = zeros(T, ndof);
 
 ik = robotics.InverseKinematics('RigidBodyTree', wam_model);
 weights = [1, 1, 1, 1, 1, 1];
 endEffector = 'tool';
-eePose = zeros(t, 3);
+eePose = zeros(T, 3);
 
 qInitial = q0;
 % Use home configuration as the initial guess
-for i = 1:t
+for i = 1:T
     % Solve for the configuration satisfying the desired end effector
     % position 
     point = traj(i,:);    
@@ -195,29 +200,85 @@ for i = 1:t
     
 end
 fprintf("IK done!\n");
-dlmwrite('wamIKThetas.txt',qs);
+dlmwrite('wam_modelIKThetas.txt',qs);
+dlmwrite('wam_modeleePose.txt',eePose);
 %% Visualize robot configurations
+
+qs = dlmread('wam_modelIKThetas.txt');
+eePose_mod = dlmread('wam_modeleePose.txt');
+
 dur = 10;
-trajTimes = linspace(0,dur,t);
+trajTimes = linspace(0,dur,T);
+ts = trajTimes(1,2); % indv. timestep
 shwEvry = 70;
+viz = 0;
+
+if viz 
+    figure;
+    set(gcf,'Visible','on');
+    axis equal;
+    plot3(traj(:,1), traj(:,2), traj(:,3), 'k-');
+    hold on;
+    title('Robot waypoint tracking visualization')
+    st_t = cputime;
+    for idx = 1:shwEvry:T % show only 100 points for efficiency
+
+        show(wam_model, qs(idx,:)', 'PreservePlot',false);
+        hold on;
+
+        plot3(eePose_mod(idx,1), eePose_mod(idx,2), eePose_mod(idx,3), 'r-','LineWidth',2);
+        hold on;
+        pause(ts*shwEvry);    
+    end
+    fprintf("Time s:%.2f\n",cputime -st_t);
+    hold off
+end
+%% Dynamics for simulation
+
+clc;
+% get the joint vel. and acc. for the inv. dynamics
+q_mod = [qs; qs(end,:); qs(end,:)];
+qd_mod = diff(qs,1)/ts;
+qdd_mod = diff(qs,2)/ts;
+
+% set up sim vars.
+q_sim = zeros(size(q_mod));
+qd_sim = zeros(size(qd_mod));
+qdd_sim = zeros(size(qdd_mod));
+eePose_sim = zeros(size(eePose_mod));
+
+% sim and model begin at same config. and vel.
+q_sim(1,:) = q_mod(1,:);
+qd_sim(1,:) = qd_mod(1,:);
+
+endEffector = 'tool';
 
 figure;
 set(gcf,'Visible','on');
-axis equal;
-plot3(traj(:,1), traj(:,2), traj(:,3), 'k-');
+plot3(traj(:,1), traj(:,2), traj(:,3), 'k*');
 hold on;
-title('Robot waypoint tracking visualization')
-st_t = cputime;
-for idx = 1:shwEvry:t % show only 100 points for efficiency
     
-    show(wam_model, qs(idx,:)', 'PreservePlot',false);
+% each time step
+for t=1:T
+    
+    % get the tau from the inv dyn.
+    tau_mod = inverseDynamics(wam_model,q_mod(t,:)',qd_mod(t,:)',qd_mod(t,:)');
+    
+    % get the actual motion from the sim using it's for dyn.
+    qdd_sim(t,:) = forwardDynamics(wam_sim,q_sim(t,:)',qd_sim(t,:)',tau_mod);
+    
+    % update our actual sim joint config. and vel. values using Euler method
+    qd_sim(t+1,:) =  qd_sim(t,:) + (ts*qdd_sim(t,:));
+    q_sim(t+1,:) =  q_sim(t,:) + (ts*qd_sim(t,:));
+    
+    % find the actual eePose from the sim
+    eePose_sim(t,:) = tform2trvec(getTransform(wam_sim,q_sim(t,:)',endEffector));
+    
+    %plot it 
+    plot3(eePose_sim(t,1), eePose_sim(t,2), eePose_sim(t,3), 'b*');
     hold on;
-
-    plot3(eePose(idx,1), eePose(idx,2), eePose(idx,3), 'r-','LineWidth',2);
-    hold on;
-    pause(trajTimes(1,2)*shwEvry);    
+    
 end
-fprintf("Time s:%.2f\n",cputime -st_t);
-hold off
+
 
 
