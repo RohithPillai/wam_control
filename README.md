@@ -1,2 +1,4 @@
 # wam_control
-16-711 alternative project code
+trajectory tracking project code
+To run the tracking run each section of the BarrettArmRSTModel.m file
+
